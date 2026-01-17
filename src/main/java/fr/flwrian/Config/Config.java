@@ -16,8 +16,8 @@ public class Config {
             InputStreamReader reader =
                 new InputStreamReader(
                     Objects.requireNonNull(
-                        Config.class.getClassLoader().getResourceAsStream("config.yaml"),
-                        "config.yaml not found"
+                        Config.class.getClassLoader().getResourceAsStream("config.yml"),
+                        "config.yml not found"
                     )
                 );
             return yaml.loadAs(reader, Config.class);
