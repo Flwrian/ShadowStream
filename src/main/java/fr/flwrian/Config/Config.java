@@ -1,4 +1,4 @@
-package fr.flwrian.Config;
+package fr.flwrian.config;
 
 import java.io.InputStreamReader;
 import java.util.List;

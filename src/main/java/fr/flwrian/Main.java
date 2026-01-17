@@ -1,6 +1,6 @@
 package fr.flwrian;
 
-import fr.flwrian.Server.Shadow;
+import fr.flwrian.server.Shadow;
 
 public class Main {
 

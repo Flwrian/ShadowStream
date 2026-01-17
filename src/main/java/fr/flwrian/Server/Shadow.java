@@ -1,8 +1,8 @@
-package fr.flwrian.Server;
+package fr.flwrian.server;
 
 import com.sun.net.httpserver.HttpServer;
 
-import fr.flwrian.Config.Config;
+import fr.flwrian.config.Config;
 
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpExchange;
