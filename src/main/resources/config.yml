@@ -5,5 +5,5 @@ apps:
   - name: web
     match:
       host: app.flwrian.com
-    prod: http://localhost:8081
-    shadow: http://localhost:9081
+    prod: https://app.flwrian.com
+    shadow: https://app.flwrian.com

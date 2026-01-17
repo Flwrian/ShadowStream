@@ -35,6 +35,11 @@ public class Config {
         public Match match;
         public String prod;
         public String shadow;
+
+        public boolean shouldMirror(AppRoute route) {
+            return route.shadow != null && !route.shadow.isEmpty();
+        }
+
     }
 
     public static class Match {
