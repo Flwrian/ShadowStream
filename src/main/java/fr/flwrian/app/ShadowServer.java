@@ -1,22 +1,20 @@
-package fr.flwrian.server;
+package fr.flwrian.app;
 
 import com.sun.net.httpserver.HttpServer;
 
 import fr.flwrian.config.Config;
 import fr.flwrian.handler.ShadowHandler;
 
-import com.sun.net.httpserver.HttpHandler;
-import com.sun.net.httpserver.HttpExchange;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
 
 
-public class Shadow {
+public class ShadowServer {
 
     Config config;
 
-    public Shadow(Config config) {
+    public ShadowServer(Config config) {
         this.config = config;
     }
 

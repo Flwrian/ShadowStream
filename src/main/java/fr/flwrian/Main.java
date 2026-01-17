@@ -1,13 +1,13 @@
 package fr.flwrian;
 
+import fr.flwrian.app.ShadowServer;
 import fr.flwrian.config.Config;
-import fr.flwrian.server.Shadow;
 
 public class Main {
 
     public static void main(String[] args) {
         Config config = Config.load();
-        Shadow shadow = new Shadow(config);
+        ShadowServer shadow = new ShadowServer(config);
         shadow.start();
     }
 }

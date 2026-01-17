@@ -1,139 +1,95 @@
 package fr.flwrian.handler;
 
-import com.sun.net.httpserver.Headers;
+import java.io.IOException;
+
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
+
 import fr.flwrian.config.Config;
-import fr.flwrian.config.Config.AppRoute;
+import fr.flwrian.mirror.MirrorService;
+import fr.flwrian.proxy.ProxyClient;
+import fr.flwrian.proxy.ProxyRequest;
+import fr.flwrian.proxy.ProxyResponse;
+import fr.flwrian.proxy.Router;
 
-import java.io.IOException;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-
-import java.util.Arrays;
-import java.util.List;
-
+/**
+ * Main HTTP handler.
+ * - Receives incoming requests
+ * - Routes them to the correct backend (prod)
+ * - Forwards the response to the client
+ * - Optionally mirrors the request to a shadow backend
+ */
 public class ShadowHandler implements HttpHandler {
 
-    private final Config config;
-    private final HttpClient client = HttpClient.newHttpClient();
+    private final Router router;
+    private final ProxyClient proxy;
+    private final MirrorService mirror;
+
 
     public ShadowHandler(Config config) {
-        this.config = config;
+        this.router = new Router(config.apps);
+        this.proxy = new ProxyClient();
+        this.mirror = new MirrorService(proxy);
     }
 
+    /**
+     * Entry point for each incoming HTTP request.
+     */
     @Override
     public void handle(HttpExchange exchange) throws IOException {
-        String method = exchange.getRequestMethod();
-        URI uri = exchange.getRequestURI();
-        String path = uri.getPath();
-        String query = uri.getQuery();
-        Headers headers = exchange.getRequestHeaders();
-        String host = headers.getFirst("Host");
+        // Convert raw HttpExchange into a clean domain object
+        var req = ProxyRequest.from(exchange);
 
-        byte[] bodyBytes = exchange.getRequestBody().readAllBytes();
-
-        AppRoute route = findRoute(config.apps, host, path);
+        // Find matching route (host + path prefix)
+        var route = router.match(req);
         if (route == null) {
             exchange.sendResponseHeaders(404, -1);
             return;
         }
 
+        // Forward request to production backend
+        proxy.forward(route.prod, req)
+             .whenComplete((resp, err) -> {
+                 // If prod is down or times out
+                 if (err != null) {
+                     send(exchange, 504, null); // Gateway Timeout
+                     return;
+                 }
+
+                 // Send prod response back to the client
+                 send(exchange, resp);
+
+                 // Mirror traffic to shadow backend if configured
+                 if (route.shadow != null) {
+                     mirror.mirror(route, req, resp);
+                 }
+             });
+    }
+
+    /**
+     * Sends a full response back to the client.
+     */
+    private void send(HttpExchange ex, ProxyResponse resp) {
         try {
-            System.out.println("Routing " + method + " " + path + " to " + route.prod);
-            HttpRequest prodReq = buildRequest(route.prod, method, path, query, headers, bodyBytes);
-            System.out.println("Forwarded request to " + prodReq.uri());
-            HttpResponse<byte[]> prodResp = client.send(prodReq, HttpResponse.BodyHandlers.ofByteArray());
-            System.out.println("Received response " + prodResp.statusCode() + " from " + prodReq.uri());
-            exchange.getResponseHeaders().putAll(prodResp.headers().map());
-            exchange.sendResponseHeaders(prodResp.statusCode(), prodResp.body().length);
-            exchange.getResponseBody().write(prodResp.body());
-            exchange.close();
-
-
-            if (route.shadow != null && !route.shadow.isEmpty()) {
-                System.out.println("Mirroring request to " + route.shadow);
-                mirrorAsync(route, method, path, query, headers, bodyBytes, prodResp);
-            }
-
-        } catch (InterruptedException e) {
-            exchange.sendResponseHeaders(500, -1);
+            ex.getResponseHeaders().putAll(resp.headers());
+            ex.sendResponseHeaders(resp.status(), resp.body().length);
+            ex.getResponseBody().write(resp.body());
+            ex.close();
+        } catch (IOException ignored) {
+            // Client probably disconnected
         }
     }
 
-    private AppRoute findRoute(List<AppRoute> routes, String host, String path) {
-        for (AppRoute route : routes) {
-            boolean hostMatches = route.match.host == null
-                    || route.match.host.equalsIgnoreCase(host);
-            boolean pathMatches = route.match.pathPrefix == null
-                    || path.startsWith(route.match.pathPrefix);
-            if (hostMatches && pathMatches) return route;
-        }
-        return null;
-    }
-
-    private HttpRequest buildRequest(
-            String baseUrl,
-            String method,
-            String path,
-            String query,
-            Headers headers,
-            byte[] bodyBytes
-    ) {
-        String fullUrl = baseUrl + path + (query != null ? "?" + query : "");
-        HttpRequest.Builder b = HttpRequest.newBuilder()
-                .uri(URI.create(fullUrl))
-                .method(method,
-                        bodyBytes.length == 0
-                                ? HttpRequest.BodyPublishers.noBody()
-                                : HttpRequest.BodyPublishers.ofByteArray(bodyBytes));
-
-        headers.forEach((k, values) -> {
-            if (!k.equalsIgnoreCase("host")
-                    && !k.equalsIgnoreCase("content-length")
-                    && !k.equalsIgnoreCase("connection")) {
-                for (String v : values) {
-                    b.header(k, v);
-                }
-            }
-        });
-        return b.build();
-    }
-
-    private void mirrorAsync(
-            AppRoute route,
-            String method,
-            String path,
-            String query,
-            Headers headers,
-            byte[] bodyBytes,
-            HttpResponse<byte[]> prodResp
-    ) {
+    /**
+     * Sends only a status code, with optional body.
+     */
+    private void send(HttpExchange ex, int status, byte[] body) {
         try {
-            HttpRequest shadowReq =
-                    buildRequest(route.shadow, method, path, query, headers, bodyBytes);
-
-            client.sendAsync(shadowReq, HttpResponse.BodyHandlers.ofByteArray())
-                    .thenAccept(shadowResp -> compare(prodResp, shadowResp))
-                    .exceptionally(e -> {
-                        System.err.println("Shadow error: " + e.getMessage());
-                        return null;
-                    });
-
-        } catch (Exception e) {
-            System.err.println("Mirror failed: " + e.getMessage());
-        }
-    }
-
-    private void compare(HttpResponse<byte[]> prod, HttpResponse<byte[]> shadow) {
-        if (prod.statusCode() != shadow.statusCode()) {
-            System.out.println("DIFF STATUS prod=" + prod.statusCode()
-                    + " shadow=" + shadow.statusCode());
-        }
-        if (!Arrays.equals(prod.body(), shadow.body())) {
-            System.out.println("DIFF BODY");
+            ex.sendResponseHeaders(status, body == null ? -1 : body.length);
+            if (body != null) ex.getResponseBody().write(body);
+            ex.close();
+        } catch (IOException ignored) {
+            // Best-effort response
         }
     }
 }
