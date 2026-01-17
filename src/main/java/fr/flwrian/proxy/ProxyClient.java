@@ -7,9 +7,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-import fr.flwrian.exceptions.Exceptions;
-import fr.flwrian.exceptions.Exceptions.ProdTimeoutException;
-import fr.flwrian.exceptions.Exceptions.ProdUnreachableException;
+import fr.flwrian.exceptions.ProdTimeoutException;
+import fr.flwrian.exceptions.ProdUnreachableException;
 
 public class ProxyClient {
 
@@ -24,8 +23,8 @@ public class ProxyClient {
         .orTimeout(3, TimeUnit.SECONDS)
         .exceptionally(e -> {
             if (e.getCause() instanceof TimeoutException)
-                throw new Exceptions().new ProdTimeoutException();
-            throw new Exceptions().new ProdUnreachableException();
+                throw new ProdTimeoutException();
+            throw new ProdUnreachableException(baseUrl);
         })
         .whenComplete((resp, err) -> {
             if (err != null) {

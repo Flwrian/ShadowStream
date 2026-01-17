@@ -7,6 +7,7 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 
 import fr.flwrian.config.Config;
+import fr.flwrian.exceptions.ProdTimeoutException;
 import fr.flwrian.mirror.MirrorService;
 import fr.flwrian.proxy.ProxyClient;
 import fr.flwrian.proxy.ProxyRequest;
@@ -52,19 +53,16 @@ public class ShadowHandler implements HttpHandler {
         proxy.forward(route.prod, req)
             .orTimeout(3, TimeUnit.SECONDS)
             .whenComplete((resp, err) -> {
-                try {
-                    if (err != null) {
-                        System.out.println("Prod failed: " + err);
+                if (err != null) {
+                    if (err.getCause() instanceof ProdTimeoutException)
                         send(exchange, 504, null);
-                    } else {
-                        send(exchange, resp);
-                    }
-                } catch (Exception e) {
-                    try {
-                        exchange.close();
-                    } catch (Exception ignored) {}
+                    else
+                        send(exchange, 502, null);
+                    return;
                 }
+                send(exchange, resp);
             });
+
 
     }
 
