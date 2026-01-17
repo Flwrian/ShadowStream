@@ -1,6 +1,7 @@
 package fr.flwrian.handler;
 
 import java.io.IOException;
+import java.util.concurrent.TimeUnit;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
@@ -49,21 +50,22 @@ public class ShadowHandler implements HttpHandler {
 
         // Forward request to production backend
         proxy.forward(route.prod, req)
-             .whenComplete((resp, err) -> {
-                 // If prod is down or times out
-                 if (err != null) {
-                     send(exchange, 504, null); // Gateway Timeout
-                     return;
-                 }
+            .orTimeout(3, TimeUnit.SECONDS)
+            .whenComplete((resp, err) -> {
+                try {
+                    if (err != null) {
+                        System.out.println("Prod failed: " + err);
+                        send(exchange, 504, null);
+                    } else {
+                        send(exchange, resp);
+                    }
+                } catch (Exception e) {
+                    try {
+                        exchange.close();
+                    } catch (Exception ignored) {}
+                }
+            });
 
-                 // Send prod response back to the client
-                 send(exchange, resp);
-
-                 // Mirror traffic to shadow backend if configured
-                 if (route.shadow != null) {
-                     mirror.mirror(route, req, resp);
-                 }
-             });
     }
 
     /**
