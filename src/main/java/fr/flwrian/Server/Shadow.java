@@ -23,7 +23,7 @@ public class Shadow {
     public void start() {
         try {
             HttpServer server = HttpServer.create(new InetSocketAddress(config.server.port), 0);
-            server.createContext("/", new ShadowHandler());
+            server.createContext("/", new ShadowHandler(config));
             server.setExecutor(null);
             server.start();
             System.out.println("Server started on port " + config.server.port);
