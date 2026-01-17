@@ -1,24 +1,28 @@
 package fr.flwrian.config;
 
+import org.yaml.snakeyaml.Yaml;
+
 import java.io.InputStreamReader;
 import java.util.List;
+import java.util.Objects;
 
 public class Config {
     public Server server;
     public List<AppRoute> apps;
 
-    public void load() {
-        // load config from yaml
+    public static Config load() {
         try {
-            System.out.println("Loading config...");
-            org.yaml.snakeyaml.Yaml yaml = new org.yaml.snakeyaml.Yaml();
-            InputStreamReader reader = new InputStreamReader(Config.class.getClassLoader().getResourceAsStream("config.yaml"));
-            Config config = yaml.loadAs(reader, Config.class);
-            server = config.server;
-            apps = config.apps;
-            System.out.println("Config loaded successfully");
+            Yaml yaml = new Yaml();
+            InputStreamReader reader =
+                new InputStreamReader(
+                    Objects.requireNonNull(
+                        Config.class.getClassLoader().getResourceAsStream("config.yaml"),
+                        "config.yaml not found"
+                    )
+                );
+            return yaml.loadAs(reader, Config.class);
         } catch (Exception e) {
-            System.err.println("Error loading config: " + e.getMessage());
+            throw new RuntimeException("Failed to load config", e);
         }
     }
 

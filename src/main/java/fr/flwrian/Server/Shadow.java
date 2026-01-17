@@ -17,7 +17,7 @@ public class Shadow {
 
     public Shadow() {
         config = new Config();
-        config.load();
+        Config.load();
     }
 
     public void start() {
